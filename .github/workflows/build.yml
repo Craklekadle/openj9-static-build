@@ -1,0 +1,80 @@
+# Builds the static OpenJ9 runtime from oneechan-runtime's scripts, pinned below, and publishes it
+# as a release. Started by hand.
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      os_min:
+        description: "lowest OS version the libraries run on"
+        default: "15.0"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  ONEECHAN_COMMIT: 4a414a02df2db4d678f2c92261688399add63a7d
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - name: Get oneechan-runtime (pinned)
+        run: |
+          git clone https://github.com/leros1337/oneechan-runtime.git runtime
+          cd runtime
+          git checkout "$ONEECHAN_COMMIT"
+          git submodule update --init --recursive
+          xcodebuild -version
+          sw_vers
+
+      - name: Tools
+        run: brew install cmake autoconf automake libtool openjdk@21 || true
+
+      - name: Fetch OpenJ9, OMR and the OpenJDK class library
+        working-directory: runtime/jvm-ios
+        run: ./fetch-openj9.sh
+
+      - name: Patches
+        working-directory: runtime/jvm-ios
+        run: ./apply-openj9-patches.sh
+
+      - name: Host build (used to build the image)
+        working-directory: runtime/jvm-ios
+        run: ./build-openj9-macos.sh
+
+      - name: Simulator build
+        working-directory: runtime/jvm-ios
+        env:
+          IOS_MIN: ${{ inputs.os_min }}
+        run: ./build-openj9-ios.sh iphonesimulator
+
+      - name: Device build
+        working-directory: runtime/jvm-ios
+        env:
+          IOS_MIN: ${{ inputs.os_min }}
+        run: ./build-openj9-ios.sh iphoneos
+
+      - name: Package
+        working-directory: runtime/jvm-ios
+        run: |
+          EMBEDDED_DIR="$GITHUB_WORKSPACE/out" ./package.sh
+          cd "$GITHUB_WORKSPACE"
+          echo "${{ env.ONEECHAN_COMMIT }}" > out/ONEECHAN_COMMIT
+          tar -czf openj9-static.tar.gz -C out .
+          ls -la openj9-static.tar.gz
+          find out -maxdepth 3 | head -60
+
+      - name: Logs
+        if: failure()
+        run: find runtime/jvm-ios/work -name '*.log' -newer runtime/jvm-ios/README.md -size -2M | head -20 | xargs -I{} sh -c 'echo "=== {}"; tail -40 "{}"'
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="openj9-$(date -u +%Y%m%d-%H%M)"
+          gh release create "$TAG" openj9-static.tar.gz --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" --notes "OpenJ9 (interpreter, static), minimum OS ${{ inputs.os_min }}, built from oneechan-runtime ${{ env.ONEECHAN_COMMIT }}."
