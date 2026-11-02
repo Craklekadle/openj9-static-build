@@ -15,6 +15,8 @@ permissions:
 
 env:
   ONEECHAN_COMMIT: 4a414a02df2db4d678f2c92261688399add63a7d
+  # The default modules of package.sh, with the HTTP server, XML and EC keys added.
+  MODULES: java.base,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.prefs,java.scripting,java.sql,java.xml,jdk.charsets,jdk.crypto.ec,jdk.dynalink,jdk.httpserver,jdk.localedata,jdk.management,jdk.unsupported,jdk.zipfs
 
 jobs:
   build:
