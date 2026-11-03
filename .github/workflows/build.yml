@@ -64,6 +64,16 @@ jobs:
         run: |
           EMBEDDED_DIR="$GITHUB_WORKSPACE/out" ./package.sh
           cd "$GITHUB_WORKSPACE"
+          # The static libraries themselves (package.sh only points at them), one per SDK, and
+          # the link flags with a placeholder for where they are unpacked.
+          for sdk in iphoneos iphonesimulator; do
+            mkdir -p "out/lib/$sdk"
+            cp "runtime/jvm-ios/work/openj9-ios/$sdk/prelinked/libopenj9.a" "out/lib/$sdk/"
+          done
+          sed -E "s#-force_load [^ ]*/openj9-ios/(iphoneos|iphonesimulator)/prelinked/libopenj9.a#-force_load \$(OPENJ9_DIR)/lib//libopenj9.a#" out/jvm.xcconfig > out/link.xcconfig
+          cat out/link.xcconfig
+          # The runtime's own host is not part of this build's output.
+          rm -rf out/host
           echo "${{ env.ONEECHAN_COMMIT }}" > out/ONEECHAN_COMMIT
           tar -czf openj9-static.tar.gz -C out .
           ls -la openj9-static.tar.gz
