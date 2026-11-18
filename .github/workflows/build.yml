@@ -44,13 +44,14 @@ jobs:
         working-directory: runtime/jvm-ios
         run: ./fetch-openj9.sh
 
+      # This recipe's own patches join the runtime's (each build script applies them all again).
       - name: Patches
         working-directory: runtime/jvm-ios
-        run: ./apply-openj9-patches.sh
+        run: |
+          cp "$GITHUB_WORKSPACE"/recipe/patches/*.patch patches/openj9/
+          ls patches/openj9
+          ./apply-openj9-patches.sh
 
-      - name: Patch for a program run as a library by a host program
-        working-directory: runtime/jvm-ios
-        run: python3 "$GITHUB_WORKSPACE/recipe/patches/loaded-image.py" work/openj9-jdk21
 
       - name: Host build (used to build the image)
         working-directory: runtime/jvm-ios

@@ -5,7 +5,7 @@ libraries, from the build scripts of
 [oneechan-runtime](https://github.com/leros1337/oneechan-runtime) (MPL-2.0) at a pinned commit.
 Those scripts fetch OpenJ9, OMR and the OpenJDK class library from their official repositories.
 
-`patches/loaded-image.py`, applied after those scripts' patches, lets the VM linked into a
+The patches in `patches/`, applied with those scripts' own, let the VM linked into a
 program run when a host program opens that program as a library (as app containers do).
 
 Releases carry the jlinked `java.home`, the static libraries with their link flags, and the

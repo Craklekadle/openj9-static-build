@@ -1,0 +1,61 @@
+# The VM linked into a program that a host program opened as a library (as app containers run
+# apps): such an image is MH_DYLIB, not MH_EXECUTE, so getj9bin() took it for a real libjvm.dylib
+# and looked for the VM's other libraries as files next to it. Given -Djava.home, an image that is
+# not libjvm counts as linked in too, and the entry points are looked up in that image.
+# Applies after openj9-static-vm-in-executable.patch.
+
+diff --git a/runtime/j9vm/jvm.c b/runtime/j9vm/jvm.c
+index d53f55a..e7d4948 100644
+--- a/runtime/j9vm/jvm.c
++++ b/runtime/j9vm/jvm.c
+@@ -150,6 +150,17 @@ struct arg_list
+  * VM's other "shared libraries" are found by the port library's static table (omrsl.c) or, for
+  * the entry points looked up here, in the executable itself. */
+ static BOOLEAN vmLinkedIntoExecutable = FALSE;
++/* LOADED_IMAGE_PATCH: the image the VM is linked into when it is a library a host program
++ * opened (an app run by an app container), else NULL (the executable). */
++static char *vmLinkedIntoLibrary = NULL;
++
++static BOOLEAN
++isLibjvmPath(const char *path)
++{
++	const char *base = strrchr(path, '/');
++	base = (NULL == base) ? path : (base + 1);
++	return (0 == strncmp(base, "libjvm.", 7)) ? TRUE : FALSE;
++}
+ static char *staticJavaHome = NULL;
+ #define STATIC_JAVA_HOME_OPTION "-Djava.home="
+ #endif /* defined(OSX) */
+@@ -1038,7 +1049,17 @@ getj9bin()
+ #if defined(OSX)
+ 	/* Not _dyld_get_image_header(0): inserted libraries (DYLD_INSERT_LIBRARIES, as XCTest uses)
+ 	 * can come before the executable in dyld's image list. */
+-	if ((NULL != libraryInfo.dli_fbase) && (MH_EXECUTE == ((const struct mach_header *)libraryInfo.dli_fbase)->filetype)) {
++	if ((NULL != libraryInfo.dli_fbase) && (MH_EXECUTE != ((const struct mach_header *)libraryInfo.dli_fbase)->filetype)
++		&& (NULL != staticJavaHome) && (NULL != libraryInfo.dli_fname) && !isLibjvmPath(libraryInfo.dli_fname)
++	) {
++		/* Linked into a program that a host program opened as a library: the same as linked into
++		 * the executable, the entry points being looked up in that image. */
++		free(vmLinkedIntoLibrary);
++		vmLinkedIntoLibrary = strdup(libraryInfo.dli_fname);
++	}
++	if ((NULL != libraryInfo.dli_fbase)
++		&& ((MH_EXECUTE == ((const struct mach_header *)libraryInfo.dli_fbase)->filetype) || (NULL != vmLinkedIntoLibrary))
++	) {
+ 		vmLinkedIntoExecutable = TRUE;
+ 		if (NULL == staticJavaHome) {
+ 			fprintf(stderr, "ERROR: OpenJ9 is linked into the executable: pass " STATIC_JAVA_HOME_OPTION "<runtime image>\n");
+@@ -2778,6 +2799,13 @@ preloadLibrary(char *dllName, BOOLEAN inJVMDir)
+ 	if (vmLinkedIntoExecutable) {
+ 		/* The library is part of the executable: look its entry points up there. */
+ 		free(buffer);
++		if (NULL != vmLinkedIntoLibrary) {
++			/* ...or in the program's image, opened as a library by its host. */
++			void *image = dlopen(vmLinkedIntoLibrary, RTLD_LAZY | RTLD_NOLOAD);
++			if (NULL != image) {
++				return image;
++			}
++		}
+ 		return RTLD_DEFAULT;
+ 	}
+ #endif /* defined(OSX) */
