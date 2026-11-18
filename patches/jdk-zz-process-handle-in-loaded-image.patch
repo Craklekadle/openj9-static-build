@@ -1,9 +1,11 @@
 # getProcessHandle() (Apple): the statically linked JNI libraries (JNI_OnLoad_net, ...) are in the
 # image holding the JDK's code, which is not the main executable when a host program opened the
-# program as a library.
+# program as a library (as app containers run apps). A JDK in its own libjava is unchanged.
+#
+# Tree: openj9-jdk21 (2e01e904eaf92c2c2f045763872432cc2053e8cf). Applied by apply-openj9-patches.sh.
 
 diff --git a/src/java.base/unix/native/libjava/jni_util_md.c b/src/java.base/unix/native/libjava/jni_util_md.c
-index 32b477a..dd39485 100644
+index 32b477a..292cbfb 100644
 --- a/src/java.base/unix/native/libjava/jni_util_md.c
 +++ b/src/java.base/unix/native/libjava/jni_util_md.c
 @@ -30,6 +30,9 @@
@@ -16,20 +18,25 @@ index 32b477a..dd39485 100644
  
  #if defined(LINUX) && (defined(_GNU_SOURCE) || \
           (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE < 200112L \
-@@ -44,6 +47,19 @@ void* getProcessHandle() {
+@@ -44,6 +47,24 @@ void* getProcessHandle() {
          return procHandle;
      }
  #ifdef __APPLE__
-+    /* LOADED_IMAGE_PATCH: the JDK linked into a program that a host program opened as a
-+     * library (an app run by an app container): its built-in libraries are in that image. */
++    /* The JDK linked into a program that a host program opened as a library (as app containers
++     * run apps): its built-in libraries (JNI_OnLoad_net, ...) are in that image, not in the host's
++     * executable. A JDK in its own libjava keeps looking in the executable. */
 +    {
 +        Dl_info info;
-+        if (dladdr((void *)getProcessHandle, &info) != 0 && info.dli_fbase != NULL
-+                && ((const struct mach_header *)info.dli_fbase)->filetype != MH_EXECUTE
-+                && info.dli_fname != NULL) {
-+            procHandle = dlopen(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD | RTLD_FIRST);
-+            if (procHandle != NULL) {
-+                return procHandle;
++        const char *base = NULL;
++        if (dladdr((void *)getProcessHandle, &info) != 0 && info.dli_fbase != NULL && info.dli_fname != NULL
++                && ((const struct mach_header *)info.dli_fbase)->filetype != MH_EXECUTE) {
++            base = strrchr(info.dli_fname, '/');
++            base = (base == NULL) ? info.dli_fname : base + 1;
++            if (strncmp(base, "libjava.", 8) != 0) {
++                procHandle = dlopen(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD | RTLD_FIRST);
++                if (procHandle != NULL) {
++                    return procHandle;
++                }
 +            }
 +        }
 +    }

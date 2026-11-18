@@ -44,7 +44,8 @@ jobs:
         working-directory: runtime/jvm-ios
         run: ./fetch-openj9.sh
 
-      # This recipe's own patches join the runtime's (each build script applies them all again).
+      # This recipe's own patches join the runtime's (each build script applies them all again); one
+      # with the name of one of the runtime's replaces it.
       - name: Patches
         working-directory: runtime/jvm-ios
         run: |
