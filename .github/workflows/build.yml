@@ -23,6 +23,11 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 360
     steps:
+      - name: This recipe
+        uses: actions/checkout@v4
+        with:
+          path: recipe
+
       - name: Get oneechan-runtime (pinned)
         run: |
           git clone https://github.com/leros1337/oneechan-runtime.git runtime
@@ -42,6 +47,10 @@ jobs:
       - name: Patches
         working-directory: runtime/jvm-ios
         run: ./apply-openj9-patches.sh
+
+      - name: Patch for a program run as a library by a host program
+        working-directory: runtime/jvm-ios
+        run: python3 "$GITHUB_WORKSPACE/recipe/patches/loaded-image.py" work/openj9-jdk21
 
       - name: Host build (used to build the image)
         working-directory: runtime/jvm-ios
